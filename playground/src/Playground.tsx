@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react"
 import { Editor } from "./Editor"
-import { Repo, DocHandle } from "@automerge/automerge-repo"
+import {
+  Repo,
+  DocHandle,
+  DocHandleChangePayload,
+} from "@automerge/automerge-repo"
 //import { MessageChannelNetworkAdapter } from "@automerge/automerge-repo-network-messagechannel"
 import { PausableNetworkAdapter } from "./PausableNetworkAdapter"
 import TabContainer from "./Tabs"
@@ -13,6 +17,7 @@ import {
 import { Mark, Node } from "prosemirror-model"
 import { BlockMarker } from "../../src/types"
 import * as Automerge from "@automerge/automerge"
+import { EditorState } from "prosemirror-state"
 
 // @ts-expect-error this is for debug
 window.A = Automerge
@@ -66,6 +71,7 @@ function Playground({ demoMode }: Props) {
       leftHandle={leftHandle}
       rightHandle={rightHandle}
       showTitle={!demoMode}
+      showDebug={!demoMode}
     />
   )
 
@@ -85,6 +91,7 @@ function Playground({ demoMode }: Props) {
             leftHandle={leftHandle}
             rightHandle={rightHandle}
             showTitle={true}
+            showDebug={true}
           />
         ),
       },
@@ -112,27 +119,35 @@ type TabProps = {
   leftHandle: DocHandle<{ text: string }>
   rightHandle: DocHandle<{ text: string }>
   showTitle: boolean
+  showDebug: boolean
 }
 
-function SameSchema({ leftHandle, rightHandle, showTitle }: TabProps) {
+function SameSchema({
+  leftHandle,
+  rightHandle,
+  showTitle,
+  showDebug,
+}: TabProps) {
   return (
     <div>
       {showTitle && <h2>Same Schema</h2>}
       <div id="editors">
         <div className="editor">
-          <Editor
+          <DebugEditor
             name="left"
             handle={leftHandle}
             path={["text"]}
             schemaAdapter={basicSchemaAdapter}
+            debug={showDebug}
           />
         </div>
         <div className="editor">
-          <Editor
+          <DebugEditor
             name="right"
             handle={rightHandle}
             path={["text"]}
             schemaAdapter={basicSchemaAdapter}
+            debug={showDebug}
           />
         </div>
       </div>
@@ -140,28 +155,95 @@ function SameSchema({ leftHandle, rightHandle, showTitle }: TabProps) {
   )
 }
 
-function DifferentSchema({ leftHandle, rightHandle, showTitle }: TabProps) {
+function DifferentSchema({
+  leftHandle,
+  rightHandle,
+  showTitle,
+  showDebug,
+}: TabProps) {
   return (
     <div>
       {showTitle && <h2>Different Schema</h2>}
       <div id="editors">
         <div className="editor">
-          <Editor
+          <DebugEditor
             name="left"
             handle={leftHandle}
             path={["text"]}
             schemaAdapter={paragraphAndHeadingSchemaAdapter}
+            debug={showDebug}
           />
         </div>
         <div className="editor">
-          <Editor
+          <DebugEditor
             name="right"
             handle={rightHandle}
             path={["text"]}
             schemaAdapter={paragraphAndListItemsSchemaAdapter}
+            debug={showDebug}
           />
         </div>
       </div>
+    </div>
+  )
+}
+
+function DebugEditor({
+  name,
+  handle,
+  path,
+  schemaAdapter,
+  debug,
+}: {
+  name?: string
+  handle: DocHandle<unknown>
+  path: Automerge.Prop[]
+  schemaAdapter: SchemaAdapter
+  debug?: boolean
+}) {
+  const [spans, setSpans] = useState(Automerge.spans(handle.doc(), path))
+  useEffect(() => {
+    if (!debug) {
+      return
+    }
+    function listener(payload: DocHandleChangePayload<unknown>) {
+      setSpans(Automerge.spans(payload.doc, ["text"]))
+    }
+    handle.on("change", listener)
+
+    return () => {
+      handle.off("change", listener)
+    }
+  }, [debug, handle])
+
+  const [editorState, setEditorState] = useState<EditorState | undefined>(
+    undefined,
+  )
+  function handleEditorStateChange(state: EditorState) {
+    setEditorState(state)
+  }
+
+  return (
+    <div>
+      <Editor
+        name={name}
+        handle={handle}
+        path={path}
+        schemaAdapter={schemaAdapter}
+        onStateChange={handleEditorStateChange}
+      />
+      {debug && (
+        <div style={{ display: "flex" }}>
+          <div>
+            <span>ProseMirror state</span>
+            <pre>{JSON.stringify(editorState?.toJSON(), null, 2)}</pre>
+          </div>
+          <div>
+            <span>Automerge state</span>
+            <pre>{JSON.stringify(spans, null, 2)}</pre>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

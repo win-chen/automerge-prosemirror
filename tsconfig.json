@@ -7,7 +7,9 @@
   ],
   "extends": "./tsconfig/tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node", "cypress"],
-    "inlineSources": true
+    "types": [
+      "node",
+      "cypress"
+    ]
   }
 }
